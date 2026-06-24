@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Comparateur de prix</title>
+  <style>
+    :root {
+      --fond: #0f1115;
+      --carte: #1a1d24;
+      --bordure: #2a2f3a;
+      --texte: #e8eaed;
+      --gris: #9aa0a6;
+      --accent: #4f8cff;
+      --vert: #3ec97a;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--fond);
+      color: var(--texte);
+      line-height: 1.5;
+      padding: 24px 16px 64px;
+    }
+    .conteneur { max-width: 760px; margin: 0 auto; }
+    header { text-align: center; margin-bottom: 28px; }
+    h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; }
+    .sous-titre { color: var(--gris); margin-top: 6px; font-size: 15px; }
+    .badge-demo {
+      display: inline-block; margin-top: 12px; padding: 4px 12px;
+      background: #3a2e12; color: #f0c14b; border-radius: 999px;
+      font-size: 13px; font-weight: 600;
+    }
+    .barre {
+      display: flex; gap: 8px; margin-bottom: 28px;
+    }
+    .barre input {
+      flex: 1; padding: 14px 16px; font-size: 16px;
+      background: var(--carte); border: 1px solid var(--bordure);
+      border-radius: 12px; color: var(--texte); outline: none;
+    }
+    .barre input:focus { border-color: var(--accent); }
+    .barre button {
+      padding: 14px 22px; font-size: 16px; font-weight: 600;
+      background: var(--accent); color: white; border: none;
+      border-radius: 12px; cursor: pointer; white-space: nowrap;
+    }
+    .barre button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .info { color: var(--gris); font-size: 14px; margin-bottom: 16px; }
+    .offre {
+      display: flex; gap: 14px; align-items: center;
+      background: var(--carte); border: 1px solid var(--bordure);
+      border-radius: 14px; padding: 14px; margin-bottom: 12px;
+      text-decoration: none; color: inherit;
+      transition: border-color 0.15s;
+    }
+    .offre:hover { border-color: var(--accent); }
+    .offre img {
+      width: 64px; height: 64px; object-fit: cover;
+      border-radius: 10px; background: #11141a; flex-shrink: 0;
+    }
+    .offre .vide {
+      width: 64px; height: 64px; border-radius: 10px;
+      background: #11141a; flex-shrink: 0; display: flex;
+      align-items: center; justify-content: center; color: var(--gris);
+      font-size: 22px;
+    }
+    .offre .infos { flex: 1; min-width: 0; }
+    .offre .titre {
+      font-weight: 600; font-size: 15px; margin-bottom: 4px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .offre .meta { color: var(--gris); font-size: 13px; }
+    .offre .prix {
+      font-size: 19px; font-weight: 700; color: var(--vert);
+      white-space: nowrap;
+    }
+    .meilleur { border-color: var(--vert); }
+    .etiquette {
+      display: inline-block; background: var(--vert); color: #06210f;
+      font-size: 11px; font-weight: 700; padding: 2px 8px;
+      border-radius: 6px; margin-bottom: 4px;
+    }
+    .vide-msg, .erreur {
+      text-align: center; color: var(--gris); padding: 40px 0;
+    }
+    .erreur { color: #ff7a7a; }
+    .chargement { text-align: center; padding: 40px 0; color: var(--gris); }
+  </style>
+</head>
+<body>
+  <div class="conteneur">
+    <header>
+      <h1>Comparateur de prix</h1>
+      <p class="sous-titre">Cherchez un produit, comparez les meilleures offres.</p>
+      {% if mode_demo %}
+      <span class="badge-demo">Mode démo — données d'exemple</span>
+      {% endif %}
+    </header>
+
+    <div class="barre">
+      <input id="champ" type="text" placeholder="Ex : iPhone 12, vélo, manteau..." />
+      <button id="bouton" onclick="rechercher()">Rechercher</button>
+    </div>
+
+    <div id="resultats"></div>
+  </div>
+
+  <script>
+    const champ = document.getElementById("champ");
+    const bouton = document.getElementById("bouton");
+    const zone = document.getElementById("resultats");
+
+    champ.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") rechercher();
+    });
+
+    async function rechercher() {
+      const terme = champ.value.trim();
+      if (!terme) return;
+
+      bouton.disabled = true;
+      zone.innerHTML = '<div class="chargement">Recherche en cours…</div>';
+
+      try {
+        const r = await fetch("/api/recherche?q=" + encodeURIComponent(terme));
+        const data = await r.json();
+
+        if (data.erreur) {
+          zone.innerHTML = '<div class="erreur">' + data.erreur + '</div>';
+          return;
+        }
+
+        if (!data.offres || data.offres.length === 0) {
+          zone.innerHTML = '<div class="vide-msg">Aucune offre trouvée pour « ' + terme + ' ».</div>';
+          return;
+        }
+
+        afficher(data.offres);
+      } catch (e) {
+        zone.innerHTML = '<div class="erreur">Impossible de contacter le serveur.</div>';
+      } finally {
+        bouton.disabled = false;
+      }
+    }
+
+    function afficher(offres) {
+      let html = '<p class="info">' + offres.length + ' offre(s) trouvée(s), triées du moins cher au plus cher.</p>';
+
+      offres.forEach((o, i) => {
+        const prix = o.prix.toFixed(2) + ' ' + (o.devise === 'EUR' ? '€' : o.devise);
+        const image = o.image
+          ? '<img src="' + o.image + '" alt="" onerror="this.outerHTML=\'<div class=&quot;vide&quot;>📦</div>\'">'
+          : '<div class="vide">📦</div>';
+        const etiquette = (i === 0)
+          ? '<span class="etiquette">Meilleur prix</span><br>'
+          : '';
+
+        html += `
+          <a class="offre ${i === 0 ? 'meilleur' : ''}" href="${o.lien}" target="_blank" rel="noopener">
+            ${image}
+            <div class="infos">
+              ${etiquette}
+              <div class="titre">${echapper(o.titre)}</div>
+              <div class="meta">${echapper(o.etat)} · ${echapper(o.vendeur)} · ${echapper(o.source)}</div>
+            </div>
+            <div class="prix">${prix}</div>
+          </a>`;
+      });
+
+      zone.innerHTML = html;
+    }
+
+    function echapper(t) {
+      const d = document.createElement("div");
+      d.textContent = t == null ? "" : String(t);
+      return d.innerHTML;
+    }
+  </script>
+</body>
+</html>
