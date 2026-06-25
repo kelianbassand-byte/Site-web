@@ -61,10 +61,11 @@ def obtenir_token_ebay():
     return _token_cache["value"]
 
 
-def chercher_sur_ebay(terme, limite=20):
+def chercher_sur_ebay(terme, tri="pertinence", limite=20):
     """
     Interroge la Browse API d'eBay et renvoie une liste d'offres
-    simplifiees, triees par prix croissant.
+    simplifiees. Le tri peut etre "pertinence", "prix_croissant"
+    ou "prix_decroissant".
     """
     token = obtenir_token_ebay()
     url = "https://api.ebay.com/buy/browse/v1/item_summary/search"
@@ -75,8 +76,16 @@ def chercher_sur_ebay(terme, limite=20):
     params = {
         "q": terme,
         "limit": limite,
-        "sort": "price",  # tri par prix croissant
     }
+    # Tri demande par l'utilisateur :
+    # - "pertinence" : on ne passe aucun "sort" a eBay (= best match, le defaut eBay)
+    # - "prix_croissant" : du moins cher au plus cher
+    # - "prix_decroissant" : du plus cher au moins cher
+    if tri == "prix_croissant":
+        params["sort"] = "price"
+    elif tri == "prix_decroissant":
+        params["sort"] = "-price"
+    # si tri == "pertinence", on ne met pas de "sort" du tout
     reponse = requests.get(url, headers=headers, params=params, timeout=15)
     reponse.raise_for_status()
     data = reponse.json()
@@ -97,7 +106,7 @@ def chercher_sur_ebay(terme, limite=20):
     return offres
 
 
-def offres_demo(terme):
+def offres_demo(terme, tri="pertinence"):
     """Donnees d'exemple pour le mode demo (sans cles eBay)."""
     base = [
         {"titre": f"{terme} - tres bon etat", "prix": 24.90, "etat": "Tres bon etat"},
@@ -118,7 +127,11 @@ def offres_demo(terme):
             "lien": "#",
             "source": "DEMO",
         })
-    offres.sort(key=lambda x: x["prix"])
+    # On applique le tri demande (en mode demo, "pertinence" garde l'ordre d'origine)
+    if tri == "prix_croissant":
+        offres.sort(key=lambda x: x["prix"])
+    elif tri == "prix_decroissant":
+        offres.sort(key=lambda x: x["prix"], reverse=True)
     return offres
 
 
@@ -130,17 +143,22 @@ def accueil():
 @app.route("/api/recherche")
 def api_recherche():
     terme = request.args.get("q", "").strip()
+    tri = request.args.get("tri", "pertinence").strip()
+    # On n'accepte que les valeurs de tri connues
+    if tri not in ("pertinence", "prix_croissant", "prix_decroissant"):
+        tri = "pertinence"
+
     if not terme:
         return jsonify({"erreur": "Merci d'indiquer un produit a rechercher."}), 400
 
     try:
         if mode_demo_actif():
-            offres = offres_demo(terme)
+            offres = offres_demo(terme, tri)
             mode = "demo"
         else:
-            offres = chercher_sur_ebay(terme)
+            offres = chercher_sur_ebay(terme, tri)
             mode = "reel"
-        return jsonify({"mode": mode, "terme": terme, "offres": offres})
+        return jsonify({"mode": mode, "terme": terme, "tri": tri, "offres": offres})
     except requests.HTTPError as e:
         return jsonify({"erreur": f"Erreur cote eBay : {e}"}), 502
     except Exception as e:
