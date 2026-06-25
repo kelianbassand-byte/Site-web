@@ -46,6 +46,17 @@
       border-radius: 12px; cursor: pointer; white-space: nowrap;
     }
     .barre button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .tri-zone {
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 20px; color: var(--gris); font-size: 14px;
+    }
+    .tri-zone select {
+      padding: 8px 12px; font-size: 14px;
+      background: var(--carte); border: 1px solid var(--bordure);
+      border-radius: 10px; color: var(--texte); outline: none;
+      cursor: pointer;
+    }
+    .tri-zone select:focus { border-color: var(--accent); }
     .info { color: var(--gris); font-size: 14px; margin-bottom: 16px; }
     .offre {
       display: flex; gap: 14px; align-items: center;
@@ -103,12 +114,22 @@
       <button id="bouton" onclick="rechercher()">Rechercher</button>
     </div>
 
+    <div class="tri-zone">
+      <label for="tri">Trier par :</label>
+      <select id="tri" onchange="rechercher()">
+        <option value="pertinence">Pertinence</option>
+        <option value="prix_croissant">Prix croissant (moins cher d'abord)</option>
+        <option value="prix_decroissant">Prix décroissant (plus cher d'abord)</option>
+      </select>
+    </div>
+
     <div id="resultats"></div>
   </div>
 
   <script>
     const champ = document.getElementById("champ");
     const bouton = document.getElementById("bouton");
+    const menuTri = document.getElementById("tri");
     const zone = document.getElementById("resultats");
 
     champ.addEventListener("keydown", (e) => {
@@ -119,11 +140,13 @@
       const terme = champ.value.trim();
       if (!terme) return;
 
+      const tri = menuTri.value;
+
       bouton.disabled = true;
       zone.innerHTML = '<div class="chargement">Recherche en cours…</div>';
 
       try {
-        const r = await fetch("/api/recherche?q=" + encodeURIComponent(terme));
+        const r = await fetch("/api/recherche?q=" + encodeURIComponent(terme) + "&tri=" + encodeURIComponent(tri));
         const data = await r.json();
 
         if (data.erreur) {
@@ -145,19 +168,31 @@
     }
 
     function afficher(offres) {
-      let html = '<p class="info">' + offres.length + ' offre(s) trouvée(s), triées du moins cher au plus cher.</p>';
+      const tri = menuTri.value;
+
+      // Texte d'information adapte au tri choisi
+      let phraseTri = '';
+      if (tri === 'prix_croissant') phraseTri = ', triées du moins cher au plus cher';
+      else if (tri === 'prix_decroissant') phraseTri = ', triées du plus cher au moins cher';
+      else phraseTri = ', classées par pertinence';
+
+      let html = '<p class="info">' + offres.length + ' offre(s) trouvée(s)' + phraseTri + '.</p>';
+
+      // Le badge "Meilleur prix" n'a de sens que si on trie par prix croissant
+      const afficherBadge = (tri === 'prix_croissant');
 
       offres.forEach((o, i) => {
         const prix = o.prix.toFixed(2) + ' ' + (o.devise === 'EUR' ? '€' : o.devise);
         const image = o.image
           ? '<img src="' + o.image + '" alt="" onerror="this.outerHTML=\'<div class=&quot;vide&quot;>📦</div>\'">'
           : '<div class="vide">📦</div>';
-        const etiquette = (i === 0)
+        const estMeilleur = (afficherBadge && i === 0);
+        const etiquette = estMeilleur
           ? '<span class="etiquette">Meilleur prix</span><br>'
           : '';
 
         html += `
-          <a class="offre ${i === 0 ? 'meilleur' : ''}" href="${o.lien}" target="_blank" rel="noopener">
+          <a class="offre ${estMeilleur ? 'meilleur' : ''}" href="${o.lien}" target="_blank" rel="noopener">
             ${image}
             <div class="infos">
               ${etiquette}
