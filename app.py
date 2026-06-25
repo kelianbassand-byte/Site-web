@@ -61,11 +61,12 @@ def obtenir_token_ebay():
     return _token_cache["value"]
 
 
-def chercher_sur_ebay(terme, tri="pertinence", limite=20):
+def chercher_sur_ebay(terme, tri="pertinence", prix_min=None, prix_max=None, limite=50):
     """
     Interroge la Browse API d'eBay et renvoie une liste d'offres
     simplifiees. Le tri peut etre "pertinence", "prix_croissant"
-    ou "prix_decroissant".
+    ou "prix_decroissant". prix_min / prix_max (en euros) filtrent
+    la tranche de prix directement cote eBay.
     """
     token = obtenir_token_ebay()
     url = "https://api.ebay.com/buy/browse/v1/item_summary/search"
@@ -77,15 +78,24 @@ def chercher_sur_ebay(terme, tri="pertinence", limite=20):
         "q": terme,
         "limit": limite,
     }
+    # Filtre de prix eBay : format [min..max], [min..] ou [..max]
+    if prix_min is not None or prix_max is not None:
+        bas = str(int(prix_min)) if prix_min is not None else ""
+        haut = str(int(prix_max)) if prix_max is not None else ""
+        params["filter"] = f"price:[{bas}..{haut}],priceCurrency:EUR"
+
     # Tri demande par l'utilisateur :
-    # - "pertinence" : on ne passe aucun "sort" a eBay (= best match, le defaut eBay)
-    # - "prix_croissant" : du moins cher au plus cher
-    # - "prix_decroissant" : du plus cher au moins cher
+    # - "pertinence" : on demande a eBay l'ordre par pertinence (best match),
+    #   pour que les VRAIS produits remontent (ex: vraies imprimantes 3D et
+    #   pas les accessoires). Ensuite on retrie ces resultats pertinents par
+    #   prix croissant de notre cote (voir plus bas).
+    # - "prix_croissant" : du moins cher au plus cher (tri eBay direct).
+    # - "prix_decroissant" : du plus cher au moins cher (tri eBay direct).
     if tri == "prix_croissant":
         params["sort"] = "price"
     elif tri == "prix_decroissant":
         params["sort"] = "-price"
-    # si tri == "pertinence", on ne met pas de "sort" du tout
+    # si tri == "pertinence", on ne met pas de "sort" : eBay renvoie par pertinence
     reponse = requests.get(url, headers=headers, params=params, timeout=15)
     reponse.raise_for_status()
     data = reponse.json()
@@ -103,10 +113,17 @@ def chercher_sur_ebay(terme, tri="pertinence", limite=20):
             "lien": item.get("itemWebUrl", "#"),
             "source": "eBay",
         })
+
+    # Mode "pertinence" : eBay a deja mis les produits les plus pertinents en
+    # tete. On retrie ces resultats par prix croissant pour avoir
+    # "les bons produits, du moins cher au plus cher".
+    if tri == "pertinence":
+        offres.sort(key=lambda x: x["prix"])
+
     return offres
 
 
-def offres_demo(terme, tri="pertinence"):
+def offres_demo(terme, tri="pertinence", prix_min=None, prix_max=None):
     """Donnees d'exemple pour le mode demo (sans cles eBay)."""
     base = [
         {"titre": f"{terme} - tres bon etat", "prix": 24.90, "etat": "Tres bon etat"},
@@ -117,6 +134,11 @@ def offres_demo(terme, tri="pertinence"):
     ]
     offres = []
     for i, o in enumerate(base):
+        # On applique le filtre de prix en demo aussi
+        if prix_min is not None and o["prix"] < prix_min:
+            continue
+        if prix_max is not None and o["prix"] > prix_max:
+            continue
         offres.append({
             "titre": o["titre"],
             "prix": o["prix"],
@@ -127,11 +149,14 @@ def offres_demo(terme, tri="pertinence"):
             "lien": "#",
             "source": "DEMO",
         })
-    # On applique le tri demande (en mode demo, "pertinence" garde l'ordre d'origine)
-    if tri == "prix_croissant":
-        offres.sort(key=lambda x: x["prix"])
-    elif tri == "prix_decroissant":
+    # On applique le tri demande.
+    # "pertinence" : en reel, eBay met les bons produits en tete puis on retrie
+    # par prix croissant. En demo, on simule en triant par prix croissant.
+    if tri == "prix_decroissant":
         offres.sort(key=lambda x: x["prix"], reverse=True)
+    else:
+        # "pertinence" et "prix_croissant" : prix croissant
+        offres.sort(key=lambda x: x["prix"])
     return offres
 
 
@@ -148,17 +173,47 @@ def api_recherche():
     if tri not in ("pertinence", "prix_croissant", "prix_decroissant"):
         tri = "pertinence"
 
+    # Bornes de prix (optionnelles). On convertit en nombre, sinon on ignore.
+    def lire_prix(nom):
+        valeur = request.args.get(nom, "").strip()
+        if valeur == "":
+            return None
+        try:
+            return float(valeur)
+        except ValueError:
+            return None
+
+    prix_min = lire_prix("prix_min")
+    prix_max = lire_prix("prix_max")
+
     if not terme:
         return jsonify({"erreur": "Merci d'indiquer un produit a rechercher."}), 400
 
     try:
         if mode_demo_actif():
-            offres = offres_demo(terme, tri)
+            offres = offres_demo(terme, tri, prix_min, prix_max)
             mode = "demo"
         else:
-            offres = chercher_sur_ebay(terme, tri)
+            offres = chercher_sur_ebay(terme, tri, prix_min, prix_max)
             mode = "reel"
-        return jsonify({"mode": mode, "terme": terme, "tri": tri, "offres": offres})
+
+        # Plage de prix reelle des resultats, pour calibrer le curseur cote site
+        if offres:
+            prix_trouves = [o["prix"] for o in offres if o["prix"] > 0]
+            plage_min = min(prix_trouves) if prix_trouves else 0
+            plage_max = max(prix_trouves) if prix_trouves else 0
+        else:
+            plage_min = 0
+            plage_max = 0
+
+        return jsonify({
+            "mode": mode,
+            "terme": terme,
+            "tri": tri,
+            "offres": offres,
+            "plage_min": plage_min,
+            "plage_max": plage_max,
+        })
     except requests.HTTPError as e:
         return jsonify({"erreur": f"Erreur cote eBay : {e}"}), 502
     except Exception as e:
