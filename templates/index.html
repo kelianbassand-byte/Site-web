@@ -57,6 +57,63 @@
       cursor: pointer;
     }
     .tri-zone select:focus { border-color: var(--accent); }
+
+    /* Filtre de prix : double curseur */
+    .prix-zone {
+      background: var(--carte); border: 1px solid var(--bordure);
+      border-radius: 14px; padding: 16px 18px; margin-bottom: 20px;
+    }
+    .prix-zone .titre-filtre {
+      font-size: 14px; color: var(--gris); margin-bottom: 18px;
+    }
+    .prix-bornes {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 14px; gap: 10px;
+    }
+    .prix-champ {
+      display: flex; align-items: center; gap: 4px;
+      background: var(--fond); border: 1px solid var(--bordure);
+      border-radius: 10px; padding: 8px 10px;
+    }
+    .prix-champ input {
+      width: 70px; background: transparent; border: none; outline: none;
+      color: var(--texte); font-size: 15px; font-weight: 600;
+      text-align: center; -moz-appearance: textfield;
+    }
+    .prix-champ input::-webkit-outer-spin-button,
+    .prix-champ input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    .prix-champ .euro { color: var(--gris); font-size: 14px; }
+
+    /* La piste et les deux poignees */
+    .slider {
+      position: relative; height: 36px; margin: 0 12px;
+    }
+    .slider .piste {
+      position: absolute; top: 50%; left: 0; right: 0; height: 4px;
+      transform: translateY(-50%); background: var(--bordure); border-radius: 4px;
+    }
+    .slider .piste-active {
+      position: absolute; top: 50%; height: 4px;
+      transform: translateY(-50%); background: var(--accent); border-radius: 4px;
+    }
+    /* Les deux input range superposes */
+    .slider input[type="range"] {
+      position: absolute; top: 0; left: 0; width: 100%; height: 36px;
+      margin: 0; background: none; pointer-events: none;
+      -webkit-appearance: none; appearance: none;
+    }
+    .slider input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none;
+      width: 22px; height: 22px; border-radius: 50%;
+      background: var(--accent); border: 3px solid #fff;
+      cursor: pointer; pointer-events: auto;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+    }
+    .slider input[type="range"]::-moz-range-thumb {
+      width: 22px; height: 22px; border-radius: 50%;
+      background: var(--accent); border: 3px solid #fff;
+      cursor: pointer; pointer-events: auto;
+    }
     .info { color: var(--gris); font-size: 14px; margin-bottom: 16px; }
     .offre {
       display: flex; gap: 14px; align-items: center;
@@ -111,16 +168,36 @@
 
     <div class="barre">
       <input id="champ" type="text" placeholder="Ex : iPhone 12, vélo, manteau..." />
-      <button id="bouton" onclick="rechercher()">Rechercher</button>
+      <button id="bouton" onclick="rechercher(true)">Rechercher</button>
     </div>
 
     <div class="tri-zone">
       <label for="tri">Trier par :</label>
-      <select id="tri" onchange="rechercher()">
-        <option value="pertinence">Pertinence</option>
+      <select id="tri" onchange="rechercher(false)">
+        <option value="pertinence">Pertinence (puis prix croissant)</option>
         <option value="prix_croissant">Prix croissant (moins cher d'abord)</option>
         <option value="prix_decroissant">Prix décroissant (plus cher d'abord)</option>
       </select>
+    </div>
+
+    <div class="prix-zone" id="prixZone" style="display:none;">
+      <div class="titre-filtre">Filtrer par prix</div>
+      <div class="prix-bornes">
+        <div class="prix-champ">
+          <input id="prixMinInput" type="number" inputmode="numeric" min="0" value="0" />
+          <span class="euro">€</span>
+        </div>
+        <div class="prix-champ">
+          <input id="prixMaxInput" type="number" inputmode="numeric" min="0" value="1000" />
+          <span class="euro">€</span>
+        </div>
+      </div>
+      <div class="slider">
+        <div class="piste"></div>
+        <div class="piste-active" id="pisteActive"></div>
+        <input type="range" id="rangeMin" min="0" max="1000" value="0" />
+        <input type="range" id="rangeMax" min="0" max="1000" value="1000" />
+      </div>
     </div>
 
     <div id="resultats"></div>
@@ -132,21 +209,113 @@
     const menuTri = document.getElementById("tri");
     const zone = document.getElementById("resultats");
 
+    // Elements du filtre de prix
+    const prixZone = document.getElementById("prixZone");
+    const rangeMin = document.getElementById("rangeMin");
+    const rangeMax = document.getElementById("rangeMax");
+    const prixMinInput = document.getElementById("prixMinInput");
+    const prixMaxInput = document.getElementById("prixMaxInput");
+    const pisteActive = document.getElementById("pisteActive");
+
+    // Bornes absolues du curseur (s'adaptent aux resultats trouves)
+    let borneBasse = 0;
+    let borneHaute = 1000;
+
     champ.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") rechercher();
+      if (e.key === "Enter") rechercher(true);
     });
 
-    async function rechercher() {
+    // --- Gestion du double curseur ---
+
+    // Empeche les deux poignees de se croiser, met a jour la barre bleue
+    function majSlider() {
+      let bas = parseInt(rangeMin.value, 10);
+      let haut = parseInt(rangeMax.value, 10);
+      if (bas > haut) {
+        // on bloque a egalite pour ne pas inverser
+        if (this === rangeMin) bas = haut;
+        else haut = bas;
+        rangeMin.value = bas;
+        rangeMax.value = haut;
+      }
+      prixMinInput.value = bas;
+      prixMaxInput.value = haut;
+      dessinerBarre();
+    }
+
+    // Dessine la portion bleue entre les deux poignees
+    function dessinerBarre() {
+      const bas = parseInt(rangeMin.value, 10);
+      const haut = parseInt(rangeMax.value, 10);
+      const total = borneHaute - borneBasse || 1;
+      const gauche = ((bas - borneBasse) / total) * 100;
+      const droite = ((haut - borneBasse) / total) * 100;
+      pisteActive.style.left = gauche + "%";
+      pisteActive.style.width = (droite - gauche) + "%";
+    }
+
+    rangeMin.addEventListener("input", majSlider);
+    rangeMax.addEventListener("input", majSlider);
+    // Quand on relache la poignee, on relance la recherche eBay avec les bornes
+    rangeMin.addEventListener("change", () => rechercher(false));
+    rangeMax.addEventListener("change", () => rechercher(false));
+
+    // Saisie manuelle dans les champs de prix
+    function appliquerChamps() {
+      let bas = parseFloat(prixMinInput.value);
+      let haut = parseFloat(prixMaxInput.value);
+      if (isNaN(bas)) bas = borneBasse;
+      if (isNaN(haut)) haut = borneHaute;
+      if (bas < borneBasse) bas = borneBasse;
+      if (haut > borneHaute) haut = borneHaute;
+      if (bas > haut) bas = haut;
+      rangeMin.value = Math.floor(bas);
+      rangeMax.value = Math.ceil(haut);
+      prixMinInput.value = Math.floor(bas);
+      prixMaxInput.value = Math.ceil(haut);
+      dessinerBarre();
+      rechercher(false);
+    }
+    prixMinInput.addEventListener("change", appliquerChamps);
+    prixMaxInput.addEventListener("change", appliquerChamps);
+
+    // Recalibre le curseur sur la plage de prix reellement trouvee
+    function calibrerSlider(plageMin, plageMax) {
+      // Arrondis larges pour de jolies bornes
+      borneBasse = Math.max(0, Math.floor(plageMin));
+      borneHaute = Math.ceil(plageMax);
+      if (borneHaute <= borneBasse) borneHaute = borneBasse + 10;
+
+      rangeMin.min = borneBasse; rangeMin.max = borneHaute;
+      rangeMax.min = borneBasse; rangeMax.max = borneHaute;
+      rangeMin.value = borneBasse;
+      rangeMax.value = borneHaute;
+      prixMinInput.value = borneBasse;
+      prixMaxInput.value = borneHaute;
+      dessinerBarre();
+    }
+
+    // --- Recherche ---
+    // recalibrer = true : nouvelle recherche (mot-cle), on reajuste le curseur
+    // recalibrer = false : on garde les bornes choisies par l'utilisateur
+    async function rechercher(recalibrer) {
       const terme = champ.value.trim();
       if (!terme) return;
 
       const tri = menuTri.value;
 
+      let url = "/api/recherche?q=" + encodeURIComponent(terme) + "&tri=" + encodeURIComponent(tri);
+      // Si on filtre (curseur deja calibre), on envoie les bornes a eBay
+      if (!recalibrer) {
+        url += "&prix_min=" + encodeURIComponent(rangeMin.value);
+        url += "&prix_max=" + encodeURIComponent(rangeMax.value);
+      }
+
       bouton.disabled = true;
       zone.innerHTML = '<div class="chargement">Recherche en cours…</div>';
 
       try {
-        const r = await fetch("/api/recherche?q=" + encodeURIComponent(terme) + "&tri=" + encodeURIComponent(tri));
+        const r = await fetch(url);
         const data = await r.json();
 
         if (data.erreur) {
@@ -156,11 +325,24 @@
 
         if (!data.offres || data.offres.length === 0) {
           zone.innerHTML = '<div class="vide-msg">Aucune offre trouvée pour « ' + terme + ' ».</div>';
+          // On affiche quand meme le filtre pour que l'utilisateur puisse elargir
+          prixZone.style.display = "block";
           return;
         }
 
+        // Sur une nouvelle recherche, on adapte le curseur aux prix trouves
+        if (recalibrer) {
+          calibrerSlider(data.plage_min, data.plage_max);
+        }
+        prixZone.style.display = "block";
+
         afficher(data.offres);
       } catch (e) {
+        zone.innerHTML = '<div class="erreur">Impossible de contacter le serveur.</div>';
+      } finally {
+        bouton.disabled = false;
+      }
+    }
         zone.innerHTML = '<div class="erreur">Impossible de contacter le serveur.</div>';
       } finally {
         bouton.disabled = false;
@@ -174,12 +356,14 @@
       let phraseTri = '';
       if (tri === 'prix_croissant') phraseTri = ', triées du moins cher au plus cher';
       else if (tri === 'prix_decroissant') phraseTri = ', triées du plus cher au moins cher';
-      else phraseTri = ', classées par pertinence';
+      else phraseTri = ', produits les plus pertinents, du moins cher au plus cher';
 
       let html = '<p class="info">' + offres.length + ' offre(s) trouvée(s)' + phraseTri + '.</p>';
 
-      // Le badge "Meilleur prix" n'a de sens que si on trie par prix croissant
-      const afficherBadge = (tri === 'prix_croissant');
+      // Le badge "Meilleur prix" a du sens quand la liste est par prix croissant,
+      // c'est-a-dire en mode "prix_croissant" ET en mode "pertinence"
+      // (qui est maintenant aussi trie par prix croissant).
+      const afficherBadge = (tri === 'prix_croissant' || tri === 'pertinence');
 
       offres.forEach((o, i) => {
         const prix = o.prix.toFixed(2) + ' ' + (o.devise === 'EUR' ? '€' : o.devise);
