@@ -31,9 +31,7 @@
       background: #3a2e12; color: #f0c14b; border-radius: 999px;
       font-size: 13px; font-weight: 600;
     }
-    .barre {
-      display: flex; gap: 8px; margin-bottom: 28px;
-    }
+    .barre { display: flex; gap: 8px; margin-bottom: 16px; }
     .barre input {
       flex: 1; padding: 14px 16px; font-size: 16px;
       background: var(--carte); border: 1px solid var(--bordure);
@@ -53,19 +51,15 @@
     .tri-zone select {
       padding: 8px 12px; font-size: 14px;
       background: var(--carte); border: 1px solid var(--bordure);
-      border-radius: 10px; color: var(--texte); outline: none;
-      cursor: pointer;
+      border-radius: 10px; color: var(--texte); outline: none; cursor: pointer;
     }
     .tri-zone select:focus { border-color: var(--accent); }
 
-    /* Filtre de prix : double curseur */
     .prix-zone {
       background: var(--carte); border: 1px solid var(--bordure);
       border-radius: 14px; padding: 16px 18px; margin-bottom: 20px;
     }
-    .prix-zone .titre-filtre {
-      font-size: 14px; color: var(--gris); margin-bottom: 18px;
-    }
+    .prix-zone .titre-filtre { font-size: 14px; color: var(--gris); margin-bottom: 18px; }
     .prix-bornes {
       display: flex; justify-content: space-between; align-items: center;
       margin-bottom: 14px; gap: 10px;
@@ -84,10 +78,7 @@
     .prix-champ input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
     .prix-champ .euro { color: var(--gris); font-size: 14px; }
 
-    /* La piste et les deux poignees */
-    .slider {
-      position: relative; height: 36px; margin: 0 12px;
-    }
+    .slider { position: relative; height: 36px; margin: 0 12px; }
     .slider .piste {
       position: absolute; top: 50%; left: 0; right: 0; height: 4px;
       transform: translateY(-50%); background: var(--bordure); border-radius: 4px;
@@ -96,7 +87,6 @@
       position: absolute; top: 50%; height: 4px;
       transform: translateY(-50%); background: var(--accent); border-radius: 4px;
     }
-    /* Les deux input range superposes */
     .slider input[type="range"] {
       position: absolute; top: 0; left: 0; width: 100%; height: 36px;
       margin: 0; background: none; pointer-events: none;
@@ -114,13 +104,13 @@
       background: var(--accent); border: 3px solid #fff;
       cursor: pointer; pointer-events: auto;
     }
+
     .info { color: var(--gris); font-size: 14px; margin-bottom: 16px; }
     .offre {
       display: flex; gap: 14px; align-items: center;
       background: var(--carte); border: 1px solid var(--bordure);
       border-radius: 14px; padding: 14px; margin-bottom: 12px;
-      text-decoration: none; color: inherit;
-      transition: border-color 0.15s;
+      text-decoration: none; color: inherit; transition: border-color 0.15s;
     }
     .offre:hover { border-color: var(--accent); }
     .offre img {
@@ -130,8 +120,7 @@
     .offre .vide {
       width: 64px; height: 64px; border-radius: 10px;
       background: #11141a; flex-shrink: 0; display: flex;
-      align-items: center; justify-content: center; color: var(--gris);
-      font-size: 22px;
+      align-items: center; justify-content: center; color: var(--gris); font-size: 22px;
     }
     .offre .infos { flex: 1; min-width: 0; }
     .offre .titre {
@@ -139,19 +128,14 @@
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     .offre .meta { color: var(--gris); font-size: 13px; }
-    .offre .prix {
-      font-size: 19px; font-weight: 700; color: var(--vert);
-      white-space: nowrap;
-    }
+    .offre .prix { font-size: 19px; font-weight: 700; color: var(--vert); white-space: nowrap; }
     .meilleur { border-color: var(--vert); }
     .etiquette {
       display: inline-block; background: var(--vert); color: #06210f;
       font-size: 11px; font-weight: 700; padding: 2px 8px;
       border-radius: 6px; margin-bottom: 4px;
     }
-    .vide-msg, .erreur {
-      text-align: center; color: var(--gris); padding: 40px 0;
-    }
+    .vide-msg, .erreur { text-align: center; color: var(--gris); padding: 40px 0; }
     .erreur { color: #ff7a7a; }
     .chargement { text-align: center; padding: 40px 0; color: var(--gris); }
   </style>
@@ -209,7 +193,6 @@
     const menuTri = document.getElementById("tri");
     const zone = document.getElementById("resultats");
 
-    // Elements du filtre de prix
     const prixZone = document.getElementById("prixZone");
     const rangeMin = document.getElementById("rangeMin");
     const rangeMax = document.getElementById("rangeMax");
@@ -217,24 +200,28 @@
     const prixMaxInput = document.getElementById("prixMaxInput");
     const pisteActive = document.getElementById("pisteActive");
 
-    // Bornes absolues du curseur (s'adaptent aux resultats trouves)
     let borneBasse = 0;
     let borneHaute = 1000;
 
-    champ.addEventListener("keydown", (e) => {
+    champ.addEventListener("keydown", function (e) {
       if (e.key === "Enter") rechercher(true);
     });
 
-    // --- Gestion du double curseur ---
+    function dessinerBarre() {
+      const bas = parseInt(rangeMin.value, 10);
+      const haut = parseInt(rangeMax.value, 10);
+      const total = (borneHaute - borneBasse) || 1;
+      const gauche = ((bas - borneBasse) / total) * 100;
+      const droite = ((haut - borneBasse) / total) * 100;
+      pisteActive.style.left = gauche + "%";
+      pisteActive.style.width = (droite - gauche) + "%";
+    }
 
-    // Empeche les deux poignees de se croiser, met a jour la barre bleue
-    function majSlider() {
+    function majSlider(quiBouge) {
       let bas = parseInt(rangeMin.value, 10);
       let haut = parseInt(rangeMax.value, 10);
       if (bas > haut) {
-        // on bloque a egalite pour ne pas inverser
-        if (this === rangeMin) bas = haut;
-        else haut = bas;
+        if (quiBouge === "min") { bas = haut; } else { haut = bas; }
         rangeMin.value = bas;
         rangeMax.value = haut;
       }
@@ -243,24 +230,11 @@
       dessinerBarre();
     }
 
-    // Dessine la portion bleue entre les deux poignees
-    function dessinerBarre() {
-      const bas = parseInt(rangeMin.value, 10);
-      const haut = parseInt(rangeMax.value, 10);
-      const total = borneHaute - borneBasse || 1;
-      const gauche = ((bas - borneBasse) / total) * 100;
-      const droite = ((haut - borneBasse) / total) * 100;
-      pisteActive.style.left = gauche + "%";
-      pisteActive.style.width = (droite - gauche) + "%";
-    }
+    rangeMin.addEventListener("input", function () { majSlider("min"); });
+    rangeMax.addEventListener("input", function () { majSlider("max"); });
+    rangeMin.addEventListener("change", function () { rechercher(false); });
+    rangeMax.addEventListener("change", function () { rechercher(false); });
 
-    rangeMin.addEventListener("input", majSlider);
-    rangeMax.addEventListener("input", majSlider);
-    // Quand on relache la poignee, on relance la recherche eBay avec les bornes
-    rangeMin.addEventListener("change", () => rechercher(false));
-    rangeMax.addEventListener("change", () => rechercher(false));
-
-    // Saisie manuelle dans les champs de prix
     function appliquerChamps() {
       let bas = parseFloat(prixMinInput.value);
       let haut = parseFloat(prixMaxInput.value);
@@ -279,13 +253,10 @@
     prixMinInput.addEventListener("change", appliquerChamps);
     prixMaxInput.addEventListener("change", appliquerChamps);
 
-    // Recalibre le curseur sur la plage de prix reellement trouvee
     function calibrerSlider(plageMin, plageMax) {
-      // Arrondis larges pour de jolies bornes
       borneBasse = Math.max(0, Math.floor(plageMin));
       borneHaute = Math.ceil(plageMax);
       if (borneHaute <= borneBasse) borneHaute = borneBasse + 10;
-
       rangeMin.min = borneBasse; rangeMin.max = borneHaute;
       rangeMax.min = borneBasse; rangeMax.max = borneHaute;
       rangeMin.value = borneBasse;
@@ -295,9 +266,6 @@
       dessinerBarre();
     }
 
-    // --- Recherche ---
-    // recalibrer = true : nouvelle recherche (mot-cle), on reajuste le curseur
-    // recalibrer = false : on garde les bornes choisies par l'utilisateur
     async function rechercher(recalibrer) {
       const terme = champ.value.trim();
       if (!terme) return;
@@ -305,7 +273,6 @@
       const tri = menuTri.value;
 
       let url = "/api/recherche?q=" + encodeURIComponent(terme) + "&tri=" + encodeURIComponent(tri);
-      // Si on filtre (curseur deja calibre), on envoie les bornes a eBay
       if (!recalibrer) {
         url += "&prix_min=" + encodeURIComponent(rangeMin.value);
         url += "&prix_max=" + encodeURIComponent(rangeMax.value);
@@ -325,12 +292,10 @@
 
         if (!data.offres || data.offres.length === 0) {
           zone.innerHTML = '<div class="vide-msg">Aucune offre trouvée pour « ' + terme + ' ».</div>';
-          // On affiche quand meme le filtre pour que l'utilisateur puisse elargir
           prixZone.style.display = "block";
           return;
         }
 
-        // Sur une nouvelle recherche, on adapte le curseur aux prix trouves
         if (recalibrer) {
           calibrerSlider(data.plage_min, data.plage_max);
         }
@@ -343,48 +308,39 @@
         bouton.disabled = false;
       }
     }
-        zone.innerHTML = '<div class="erreur">Impossible de contacter le serveur.</div>';
-      } finally {
-        bouton.disabled = false;
-      }
-    }
 
     function afficher(offres) {
       const tri = menuTri.value;
 
-      // Texte d'information adapte au tri choisi
-      let phraseTri = '';
-      if (tri === 'prix_croissant') phraseTri = ', triées du moins cher au plus cher';
-      else if (tri === 'prix_decroissant') phraseTri = ', triées du plus cher au moins cher';
-      else phraseTri = ', produits les plus pertinents, du moins cher au plus cher';
+      let phraseTri = "";
+      if (tri === "prix_croissant") phraseTri = ", triées du moins cher au plus cher";
+      else if (tri === "prix_decroissant") phraseTri = ", triées du plus cher au moins cher";
+      else phraseTri = ", produits les plus pertinents, du moins cher au plus cher";
 
       let html = '<p class="info">' + offres.length + ' offre(s) trouvée(s)' + phraseTri + '.</p>';
 
-      // Le badge "Meilleur prix" a du sens quand la liste est par prix croissant,
-      // c'est-a-dire en mode "prix_croissant" ET en mode "pertinence"
-      // (qui est maintenant aussi trie par prix croissant).
-      const afficherBadge = (tri === 'prix_croissant' || tri === 'pertinence');
+      const afficherBadge = (tri === "prix_croissant" || tri === "pertinence");
 
-      offres.forEach((o, i) => {
+      offres.forEach(function (o, i) {
         const prix = o.prix.toFixed(2) + ' ' + (o.devise === 'EUR' ? '€' : o.devise);
-        const image = o.image
-          ? '<img src="' + o.image + '" alt="" onerror="this.outerHTML=\'<div class=&quot;vide&quot;>📦</div>\'">'
-          : '<div class="vide">📦</div>';
+        let image;
+        if (o.image) {
+          image = '<img src="' + o.image + '" alt="" onerror="this.outerHTML=\'<div class=&quot;vide&quot;>📦</div>\'">';
+        } else {
+          image = '<div class="vide">📦</div>';
+        }
         const estMeilleur = (afficherBadge && i === 0);
-        const etiquette = estMeilleur
-          ? '<span class="etiquette">Meilleur prix</span><br>'
-          : '';
+        const etiquette = estMeilleur ? '<span class="etiquette">Meilleur prix</span><br>' : '';
 
-        html += `
-          <a class="offre ${estMeilleur ? 'meilleur' : ''}" href="${o.lien}" target="_blank" rel="noopener">
-            ${image}
-            <div class="infos">
-              ${etiquette}
-              <div class="titre">${echapper(o.titre)}</div>
-              <div class="meta">${echapper(o.etat)} · ${echapper(o.vendeur)} · ${echapper(o.source)}</div>
-            </div>
-            <div class="prix">${prix}</div>
-          </a>`;
+        html += '<a class="offre ' + (estMeilleur ? 'meilleur' : '') + '" href="' + o.lien + '" target="_blank" rel="noopener">'
+          + image
+          + '<div class="infos">'
+          + etiquette
+          + '<div class="titre">' + echapper(o.titre) + '</div>'
+          + '<div class="meta">' + echapper(o.etat) + ' · ' + echapper(o.vendeur) + ' · ' + echapper(o.source) + '</div>'
+          + '</div>'
+          + '<div class="prix">' + prix + '</div>'
+          + '</a>';
       });
 
       zone.innerHTML = html;
@@ -392,7 +348,7 @@
 
     function echapper(t) {
       const d = document.createElement("div");
-      d.textContent = t == null ? "" : String(t);
+      d.textContent = (t == null) ? "" : String(t);
       return d.innerHTML;
     }
   </script>
